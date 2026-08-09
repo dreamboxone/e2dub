@@ -1,184 +1,266 @@
-# e2dub
+# e2dub 0.2.12
 
-Lightweight live dubbing plugin for DreamOS / Enigma2 on Dreambox One.
+افزونه دوبله زنده شبکه‌های تلویزیونی برای DreamOS / Enigma2 با استفاده از
+Gemini Live Translation.
 
-The Enigma2 UI and process supervisor are Python 2.7 compatible. Gemini Live
-API communication uses a small standard-library-only helper, so no Google SDK
-or third-party Python package is installed on the receiver.
+e2dub صدای شبکه در حال پخش را به Gemini می‌فرستد، ترجمه فارسی را دریافت
+می‌کند و آن را همراه تصویر اصلی شبکه روی Dreambox و، در صورت نیاز، روی
+لپ‌تاپ پخش می‌کند.
 
-Runtime data:
+- دستگاه هدف: Dreambox One با پردازنده ARM64
+- رابط Enigma2: سازگار با Python 2.7
+- زبان مقصد: فارسی (`fa`)
+- تشخیص زبان مبدأ: خودکار
+- مدل: `gemini-3.5-live-translate-preview`
+- بدون Google SDK و بدون سرور واسطه
+- کانال تلگرام: [t.me/routekernel1](https://t.me/routekernel1)
 
-- API key: `/root/apikey.txt`
-- Log: `/tmp/E2LivDub.log`
-- Output language: Persian (`fa`)
-- Gemini model: `gemini-3.5-live-translate-preview`
+## امکانات
 
-The pipeline reads the selected DVB service from Enigma2 streamproxy, sends
-16-bit mono 16 kHz PCM to Gemini in 100 ms chunks, encodes the returned 24 kHz
-PCM as AAC, and remuxes it with the original video into a local MPEG-TS stream.
+- دوبله زنده مستقیم بین Dreambox و Google از طریق WebSocket
+- حفظ تصویر اصلی شبکه و جایگزینی/میکس صدای ترجمه‌شده
+- تشخیص خودکار تغییر شبکه و راه‌اندازی مجدد ترجمه
+- reconnect خودکار در قطع موقت اینترنت یا Gemini
+- کنترل صدای اصلی شبکه از صفر تا صد با کلیدهای چپ و راست
+- کاهش خودکار صدای اصلی هنگام پخش گفتار ترجمه‌شده
+- نمایش نام شبکه، فرکانس، ماهواره و نسخه افزونه
+- خروجی دوم MPEG-TS برای تماشای تصویر و صدای ترجمه‌شده در لپ‌تاپ
+- پاک‌سازی processها و بازگرداندن شبکه اصلی هنگام Stop یا حذف افزونه
 
-Build the DreamOS arm64 Debian package with:
+## نصب
+
+فایل DEB نسخه ARM64 را در مسیر `/tmp` ریسیور کپی کنید و سپس از SSH اجرا کنید:
+
+```sh
+dpkg -i /tmp/enigma2-plugin-extensions-e2dub_0.2.12_arm64.deb
+```
+
+پس از نصب، رابط Enigma2 به‌صورت خودکار restart می‌شود. اگر restart انجام نشد:
+
+```sh
+systemctl restart enigma2
+```
+
+بررسی نسخه نصب‌شده:
+
+```sh
+dpkg -s enigma2-plugin-extensions-e2dub | grep '^Version:'
+```
+
+## تنظیم API Key
+
+فایل API Key فقط در این مسیر خوانده می‌شود:
+
+```text
+/root/apikey.txt
+```
+
+این فایل هنگام نصب اولیه ساخته می‌شود. فقط API Key را داخل آن قرار دهید؛
+فاصله، عنوان یا متن دیگری اضافه نکنید. سپس سطح دسترسی را بررسی کنید:
+
+```sh
+chmod 600 /root/apikey.txt
+chown root:root /root/apikey.txt
+```
+
+API Key هیچ‌گاه در لاگ e2dub نوشته نمی‌شود.
+
+> **هشدار:** هنگام حذف یا purge بسته، فایل `/root/apikey.txt` نیز حذف می‌شود.
+> قبل از uninstall در صورت نیاز از کلید خود نسخه پشتیبان بگیرید.
+
+## استفاده روی تلویزیون
+
+1. شبکه تلویزیونی موردنظر را باز کنید.
+2. از Plugin Browser افزونه `e2dub` را اجرا کنید.
+3. با کلیدهای `LEFT` و `RIGHT` میزان صدای اصلی شبکه را انتخاب کنید.
+4. کلید سبز (`GREEN`) را برای Start بزنید.
+5. صفحه افزونه و منوها بسته می‌شوند و تصویر تمام‌صفحه باقی می‌ماند.
+6. تا دریافت اولین ترجمه، پیام `Please wait for translation` نمایش داده می‌شود.
+
+پس از دریافت اولین صوت، Enigma2 به خروجی نهایی e2dub سوییچ می‌کند.
+
+### توقف ترجمه
+
+دوباره e2dub را باز کنید و کلید قرمز (`RED`) را بزنید. همه processها بسته
+می‌شوند و سرویس اصلی شبکه بازگردانده می‌شود.
+
+کلید `EXIT` فقط صفحه افزونه را می‌بندد و ترجمه فعال را متوقف نمی‌کند.
+
+### تغییر شبکه
+
+هنگام فعال‌بودن e2dub می‌توانید شبکه را تغییر دهید. افزونه تغییر شبکه را
+تشخیص می‌دهد و pipeline ترجمه را برای شبکه جدید بازسازی می‌کند.
+
+## کنترل صدای اصلی شبکه
+
+نوار سبز و عدد کنار آن مقدار صدای اصلی را نشان می‌دهند. هر بار فشردن کلید
+چپ یا راست مقدار را پنج درصد تغییر می‌دهد.
+
+- `0%`: فقط صدای ترجمه‌شده پخش می‌شود.
+- بیشتر از `0%`: صدای اصلی هنگام سکوت ترجمه شنیده می‌شود.
+- هنگام صحبت ترجمه‌شده، صدای اصلی به‌صورت خودکار کاهش می‌یابد.
+
+تغییر مقدار فوراً ذخیره می‌شود. اگر e2dub فعال باشد، پس از حدود ۸۰۰
+میلی‌ثانیه pipeline صوتی یک‌بار بازسازی می‌شود؛ در این حالت ممکن است اتصال
+مجدد به Gemini و برگشت صدا چند ثانیه زمان ببرد.
+
+## پخش در لپ‌تاپ با VLC
+
+نسخه 0.2.12 خروجی نهایی تصویر و صدا را هم‌زمان به این مقصد می‌فرستد:
+
+```text
+Laptop IP: 192.168.2.3
+UDP port: 19877
+```
+
+Dreambox و لپ‌تاپ باید در یک شبکه باشند. e2dub را روی ریسیور Start کنید و
+صبر کنید وضعیت ترجمه فعال شود.
+
+### بازکردن پورت Windows Firewall
+
+PowerShell را با گزینه **Run as administrator** باز کنید و فقط دستور زیر را
+اجرا کنید:
+
+```powershell
+New-NetFirewallRule -DisplayName "e2dub UDP Stream" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 19877 -RemoteAddress 192.168.2.2 -Profile Any
+```
+
+بررسی قانون ساخته‌شده:
+
+```powershell
+Get-NetFirewallRule -DisplayName "e2dub UDP Stream"
+```
+
+مقادیر `Enabled` و `Action` باید به‌ترتیب `True` و `Allow` باشند.
+
+### بازکردن استریم در VLC
+
+در VLC وارد `Media > Open Network Stream` شوید و این آدرس را وارد کنید:
+
+```text
+udp://@:19877
+```
+
+یا از PowerShell:
+
+```powershell
+& "C:\Program Files\VideoLAN\VLC\vlc.exe" --network-caching=1000 "udp://@:19877"
+```
+
+این آدرس UDP در مرورگر باز نمی‌شود و باید با VLC، FFplay یا پخش‌کننده سازگار
+با MPEG-TS استفاده شود. آدرس قدیمی StreamProxy روی پورت 8001 برای سرویس محلی
+نوع 4097 در این DreamOS پیام `no service` می‌دهد و نباید استفاده شود.
+
+### تغییر IP لپ‌تاپ
+
+IP مقصد در نسخه فعلی روی `192.168.2.3` تنظیم شده است. بهتر است در روتر برای
+لپ‌تاپ DHCP Reservation بسازید. اگر IP لپ‌تاپ عوض شود، مقدار `LAPTOP_IP` در
+`src/E2Dub/plugin.py` باید تغییر کند و بسته دوباره ساخته و نصب شود.
+
+نبودن لپ‌تاپ یا بسته‌بودن VLC، پخش روی Dreambox را متوقف نمی‌کند.
+
+## عیب‌یابی
+
+### صدای ترجمه پخش نمی‌شود
+
+```sh
+ls -l /root/apikey.txt
+cat /tmp/e2dub-state
+tail -100 /tmp/E2LivDub.log
+```
+
+فایل API Key نباید خالی باشد. محتوای کلید را در خروجی ترمینال، اسکرین‌شات یا
+گزارش خطا منتشر نکنید.
+
+### صدای اصلی شنیده نمی‌شود
+
+- مقدار Original channel volume را بیشتر از صفر قرار دهید.
+- پس از تغییر مقدار، برای بازسازی pipeline چند ثانیه صبر کنید.
+- لاگ باید شروع pipeline را با مقدار جدید نشان دهد:
+
+```sh
+grep 'Starting pipeline' /tmp/E2LivDub.log | tail
+```
+
+### VLC تصویر یا صدا ندارد
+
+- e2dub باید روی Dreambox فعال باشد.
+- IP لپ‌تاپ باید `192.168.2.3` باشد.
+- قانون Firewall باید فعال باشد.
+- VLC باید آدرس `udp://@:19877` را باز کند، نه آدرس HTTP مرورگر.
+- هر دو دستگاه باید در subnet شبکه `192.168.2.x` باشند.
+- در شروع استریم چند ثانیه برای دریافت PAT/PMT و keyframe ویدئو صبر کنید.
+
+بررسی IP در ویندوز:
+
+```powershell
+ipconfig
+```
+
+### Enigma2 یا منو پاسخ نمی‌دهد
+
+```sh
+systemctl restart enigma2
+```
+
+پس از بالا آمدن GUI، خطاهای اخیر را بررسی کنید:
+
+```sh
+journalctl -u enigma2 -n 150 --no-pager
+```
+
+## فایل‌ها و پورت‌ها
+
+| مورد | مسیر یا مقدار |
+|---|---|
+| API Key | `/root/apikey.txt` |
+| لاگ | `/tmp/E2LivDub.log` |
+| وضعیت helper | `/tmp/e2dub-state` |
+| reference اصلی | `/tmp/e2dub-original-ref` |
+| FIFO صوت ترجمه | `/tmp/e2dub-output.pcm` |
+| خروجی محلی Dreambox | `127.0.0.1:19876/UDP` |
+| خروجی لپ‌تاپ | `192.168.2.3:19877/UDP` |
+
+## حذف افزونه
+
+```sh
+dpkg -r enigma2-plugin-extensions-e2dub
+```
+
+حذف بسته processهای باقی‌مانده را متوقف می‌کند، سرویس اصلی را بازمی‌گرداند و
+فایل `/root/apikey.txt` را نیز حذف می‌کند.
+
+## امنیت و حریم خصوصی
+
+- ارتباط Gemini مستقیماً بین Dreambox و Google برقرار می‌شود.
+- هیچ سرور واسطه متعلق به پروژه استفاده نمی‌شود.
+- API Key در لاگ نوشته نمی‌شود.
+- خروجی UDP لپ‌تاپ رمزگذاری و احراز هویت ندارد؛ فقط در شبکه محلی امن استفاده
+  کنید و پورت‌های 19877 یا 8001 را روی اینترنت Port Forward نکنید.
+
+## ساخت بسته برای توسعه‌دهنده
+
+پیش‌نیازها در زمان اجرا روی Dreambox شامل Enigma2، FFmpeg، Python 2.7 و
+گواهی‌های CA هستند. هیچ Python package اضافی لازم نیست.
+
+ساخت بسته:
 
 ```sh
 python build_deb.py
 ```
 
-The resulting package is written to `dist/`.
+خروجی در پوشه `dist/` ساخته می‌شود.
 
-## 0.1.2
+اجرای تست‌ها:
 
-- Uses the DreamOS `eTimer.timeout.connect()` API and retains signal connections.
-- Adds a guarded plugin entry point so screen-construction errors cannot escape
-  into Enigma2's ActionMap.
-- Removes stale Python bytecode during installation.
-- Closes WebSocket resources on every reconnect path.
+```sh
+python -m unittest discover -s tests -v
+```
 
-## 0.1.3
+## تغییرات مهم نسخه 0.2.12
 
-- Adds a compact 300x110 plugin-browser logo with safe inner margins.
-- Creates `/tmp/E2LivDub.log` during installation.
-- Schedules an automatic Enigma2 GUI restart after `dpkg` finishes.
-
-## 0.1.4
-
-- Creates an empty root-owned `/apikey.txt` with mode `0600` on first install.
-- Preserves an existing API key during package upgrades.
-- Deletes `/apikey.txt` when the package is removed or purged.
-
-## 0.1.5
-
-- Corrects the API-key location to `/root/apikey.txt` everywhere.
-- Migrates a key left at the incorrect 0.1.4 path without truncating it.
-- Deletes `/root/apikey.txt` when the package is removed or purged.
-
-## 0.1.6
-
-- Treats Python 2.7/OpenSSL read timeouts as normal idle WebSocket reads instead
-  of disconnecting the Gemini session every two seconds.
-- Logs when source PCM starts streaming and when translated PCM first arrives.
-- Moves the pipeline into a persistent controller so the plugin window closes
-  immediately after Start while translation continues in the background.
-- Reopening the plugin shows the current background status and allows Stop.
-
-## 0.1.7
-
-- Allows up to 60 seconds for a slow Gemini `setupComplete` response.
-- Keeps the original DVB service playing while Gemini connects.
-- Switches Enigma2 to the local translated stream only after the first real
-  translated PCM block arrives, preventing a false LIVE state with silence.
-
-## 0.1.8
-
-- Adds timed Enigma2 notifications for starting, waiting, ready, and stopped.
-- Replaces the service reference with channel name, frequency, and satellite.
-- Refreshes the screen with a compact dark design and green live-status accent.
-- Tunes Gemini automatic speech detection for shorter phrase-end latency.
-
-## 0.1.9
-
-- Replaces the unhelpful 60-second wait for a stalled initial Gemini setup with
-  a 10-second watchdog and a one-second retry.
-- Shows `Gemini is busy - retrying...` while rotating a stuck connection.
-- Keeps the original channel audible until translated PCM is actually received.
-
-## 0.2.0
-
-- Adds strict WebSocket frame validation and preserves server close codes,
-  reasons, and structured Live API errors in sanitized diagnostics.
-- Publishes an atomic JSON state containing the setup profile, attempt number,
-  and last non-secret failure detail; legacy plain state files remain readable.
-- Tries the managed long-session setup first, then falls back to the minimal
-  official Live Translation setup with exponential retry backoff.
-- Removes the speculative `Gemini is busy` status. The screen now reports the
-  actual setup phase or server error without exposing the API key.
-- Detects channel changes even while the initial Gemini session is connecting.
-- Extends package-removal cleanup to capture, relay, helper, and mux processes.
-
-## 0.2.1
-
-- Reduces the audio-capture probe window after an on-device benchmark showed
-  first PCM arriving in one second instead of three on the tested DVB service.
-
-## 0.2.2
-
-- Adds a balanced low-latency VAD profile with 350 ms end-of-speech silence;
-  the minimal official setup remains the automatic compatibility fallback.
-- Reduces local MPEG-TS mux delay from 700 ms to 100 ms and translated-service
-  readiness polling from 500 ms to 100 ms.
-
-## 0.2.3
-
-- Treats Python 2/OpenSSL `EAGAIN` (`Errno 11`) as a transient idle read
-  condition instead of tearing down a healthy Gemini session.
-- Resets reconnect backoff after every successfully established session.
-- Restores the proven 700 ms MPEG-TS mux delay to prevent decoder starvation
-  and periodic buffering on DreamOS.
-
-## 0.2.4
-
-- Handles the second Python 2/OpenSSL nonblocking-read form, `The operation did
-  not complete (read)`, as an idle socket condition rather than a disconnect.
-
-## 0.2.5
-
-- Displays the installed e2dub version directly in the plugin screen.
-- Limits FFmpeg interleave buffering from its 10-second default to 500 ms and
-  flushes local UDP packets immediately.
-- Repeats H.264 parameter data at keyframes, publishes PAT/PMT and SDT tables
-  periodically, marks the initial discontinuity, and enlarges the UDP socket
-  buffer to improve DreamOS decoder recovery and video continuity.
-
-## 0.2.6
-
-- Keeps the original DVB channel name when switching to the local translated
-  transport stream.
-- Closes the plugin browser and parent menus after Start, returning directly to
-  fullscreen television.
-- Adds a persisted 0-100 original-channel volume setting (default 0). When it is
-  enabled, FFmpeg plays the original channel during translated silence and
-  automatically ducks it beneath translated speech.
-
-## 0.2.7
-
-- Fixes an Enigma2 menu regression introduced in 0.2.6. Parent plugin menus
-  are now closed only through their normal `Screen.close()` lifecycle.
-- Never mutates `session.dialog_stack` and never destroys parent dialogs with
-  `deleteDialog`, so Plugin Browser and the main menu remain reusable.
-
-## 0.2.8
-
-- Moves original-channel volume to the main plugin screen as a LEFT/RIGHT
-  progress bar and always shows the exact numeric percentage beside it.
-- Saves every volume change immediately. If e2dub is already active, changes
-  are debounced and the audio pipeline is rebuilt once with the new mix level.
-- Returns briefly to the original DVB service during a live audio-mix rebuild,
-  avoiding a stale pipeline that was started with the previous volume.
-
-## 0.2.9
-
-- Replaces the skin-dependent ProgressBar with a directly resized eLabel fill,
-  so LEFT/RIGHT visibly changes the bar on DreamOS skins without a bar pixmap.
-- Adds `Telegram: t.me/routekernel1` and a centered plugin-version line below
-  the main controls.
-
-## 0.2.10
-
-- Replaces the unpainted empty-label fill with 20 individually painted volume
-  segments. Each LEFT/RIGHT step visibly toggles exactly one 5% segment.
-- Uses a non-empty label in every segment so DreamOS paints its green
-  background consistently across skins.
-
-## 0.2.11
-
-- Uses a DreamOS `MultiPixmap` backed by 21 pre-rendered PNG levels (0-100%).
-  This bypasses the image's non-painting Label and ProgressBar implementations.
-- Generates the compact RGB bar PNGs deterministically while building the DEB,
-  without adding Pillow or any runtime dependency to the receiver.
-
-## 0.2.12
-
-- Duplicates the final translated MPEG-TS with FFmpeg's tee muxer: the existing
-  local TV output remains on UDP 19876 and a laptop output is sent to
-  `192.168.2.3:19877`.
-- Marks the laptop tee slave `onfail=ignore`, so an offline laptop or closed VLC
-  cannot interrupt Dreambox playback or translation.
+- اضافه‌شدن خروجی دوم MPEG-TS برای لپ‌تاپ با FFmpeg tee muxer
+- ادامه پخش تلویزیون حتی در صورت قطع یا بسته‌بودن لپ‌تاپ
+- نوار صدای گرافیکی مبتنی بر ۲۱ تصویر PNG برای سازگاری با اسکین DreamOS
+- نمایش عدد صدا، کانال تلگرام و نسخه افزونه در صفحه اصلی
+- اعمال خودکار تغییر صدای اصلی با بازسازی کنترل‌شده pipeline
